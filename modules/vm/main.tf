@@ -1,95 +1,118 @@
-resource "azurerm_public_ip" "devops_ip" {
-    for_each = var.servers
-    name                = "${each.value}-public-ip"
-    location            = var.location
-    resource_group_name = var.resource_group_name
-    allocation_method   = "Static"
+# Data source para obtener la AMI más reciente de Ubuntu 22.04
+data "aws_ami" "ubuntu" {
+  most_recent = true
+  owners      = ["099720109477"] # Canonical (propietario oficial de Ubuntu)
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
 }
 
-resource "azurerm_network_interface" "devops_nic" {
-    for_each = var.servers
-    name                = "${each.value}-nic"
-    location            = var.location
-    resource_group_name = var.resource_group_name
+# Security Group - equivalente a Network Security Group de Azure
+resource "aws_security_group" "devops_sg" {
+  name        = "${var.prefix_name}-sg"
+  description = "Security group para servidores DevOps"
+  vpc_id      = var.vpc_id
 
-    ip_configuration {
-    name                          = "${each.value}-configuration"
-    subnet_id                     = var.subnet_id
-    private_ip_address_allocation = "Dynamic"
-    public_ip_address_id          = azurerm_public_ip.devops_ip[each.value].id
-    }
+  # Regla SSH (puerto 22)
+  ingress {
+    description = "SSH"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Regla HTTP (puerto 80)
+  ingress {
+    description = "HTTP"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Regla HTTPS (puerto 443)
+  ingress {
+    description = "HTTPS"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Regla SonarQube (puerto 9000)
+  ingress {
+    description = "SonarQube"
+    from_port   = 9000
+    to_port     = 9000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Regla Jenkins (puerto 8080)
+  ingress {
+    description = "Jenkins"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Permitir todo el tráfico de salida
+  egress {
+    description = "All outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "${var.prefix_name}-sg"
+  }
 }
 
-resource "azurerm_network_security_group" "devops_sg" {
-    name                = "${var.prefix_name}-sg"
-    location            = var.location
-    resource_group_name = var.resource_group_name
+# Instancias EC2 - equivalente a Linux Virtual Machine de Azure
+resource "aws_instance" "vm_devops" {
+  for_each = var.servers
 
-    security_rule {
-        name                       = "SSH"
-        priority                   = 1001
-        direction                  = "Inbound"
-        access                     = "Allow"
-        protocol                   = "Tcp"
-        source_port_range          = "*"
-        destination_port_range     = "22"
-        source_address_prefix      = "*"
-        destination_address_prefix = "*"
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = lookup(var.instance_types, each.value, var.instance_type)
+  key_name      = var.key_name
+  subnet_id     = var.subnet_id
+
+  vpc_security_group_ids = [aws_security_group.devops_sg.id]
+
+  # Asignar IP pública automáticamente
+  associate_public_ip_address = true
+
+  # Configuración del disco raíz (equivalente a os_disk de Azure)
+  root_block_device {
+    volume_type           = "gp3"
+    volume_size           = 15 # 15 GB × 2 instancias = 30 GB total (Free Tier: 30 GB)
+    delete_on_termination = true
+    encrypted             = false
+
+    tags = {
+      Name = "${each.value}-root-disk"
     }
-    security_rule {
-        name                       = "HTTP"
-        priority                   = 1002
-        direction                  = "Inbound"
-        access                     = "Allow"
-        protocol                   = "Tcp"
-        source_port_range          = "*"
-        destination_port_range     = "80"
-        source_address_prefix      = "*"
-        destination_address_prefix = "*"
-    }
-    security_rule {
-        name                       = "Sonar"
-        priority                   = 1003
-        direction                  = "Inbound"
-        access                     = "Allow"
-        protocol                   = "Tcp"
-        source_port_range          = "*"
-        destination_port_range     = "9000"
-        source_address_prefix      = "*"
-        destination_address_prefix = "*"
-    }
-}
+  }
 
-resource "azurerm_network_interface_security_group_association" "devops_association" {
-    for_each = var.servers
-    network_interface_id      = azurerm_network_interface.devops_nic[each.value].id
-    network_security_group_id = azurerm_network_security_group.devops_sg.id
-}
+  # User data para configuración inicial (opcional)
+  user_data = <<-EOF
+              #!/bin/bash
+              apt-get update
+              apt-get upgrade -y
+              EOF
 
-resource "azurerm_linux_virtual_machine" "vm_devops" {
-    for_each = var.servers
-    name = "${each.value}-machine"
-    resource_group_name = var.resource_group_name
-    location = var.location
-    size = var.size_servers
-    network_interface_ids = [azurerm_network_interface.devops_nic[each.value].id]
-    disable_password_authentication = false
-    admin_username = var.user
-    admin_password = var.password
-
-    source_image_reference {
-        publisher = "Canonical"
-        offer = "UbuntuServer"
-        sku = "16.04-LTS"
-        version = "latest"
-    }
-
-
-    os_disk {
-        caching = "ReadWrite"
-        storage_account_type = "Standard_LRS"
-    }
-
-    depends_on = [azurerm_network_interface_security_group_association.devops_association]
-
+  tags = {
+    Name = "${each.value}-instance"
+  }
 }

@@ -1,40 +1,36 @@
 variable "servers" {
-    type = set(string)
-    description = "lista de servidores que vamos a desplegar"
+  type        = set(string)
+  description = "lista de servidores que vamos a desplegar"
 }
 
-variable "size_servers" {
-    type = string
-    default = "Standard_DS1_v2"
-    description = "tamaño de instancia de los servidores"
+variable "instance_type" {
+  type        = string
+  default     = "t3.micro"
+  description = "tipo de instancia EC2 por defecto"
 }
 
-variable "resource_group_name" {
-    type = string
-    description = "grupo de recursos de las vm"
-}
-
-variable "location" {
-    type = string
-    description = "region"
+variable "instance_types" {
+  type        = map(string)
+  default     = {}
+  description = "tipos de instancia específicos por servidor (opcional)"
 }
 
 variable "subnet_id" {
-    type = string
-    description = "id de la subnet de los servidores"
+  type        = string
+  description = "id de la subnet de los servidores"
 }
 
-variable "user" {
-    type = string
-    description = "usuario ssh"
+variable "vpc_id" {
+  type        = string
+  description = "id del VPC"
 }
 
-variable "password" {
-    type = string
-    description = "password ssh"
+variable "key_name" {
+  type        = string
+  description = "nombre del key pair para SSH (sin password, más seguro)"
 }
 
 variable "prefix_name" {
-    type = string
-    description = "prefijo de los recursos"
+  type        = string
+  description = "prefijo de los recursos"
 }
