@@ -44,20 +44,6 @@ pipeline {
             }
         }
 
-        stage('Approval') {
-            when {
-                branch 'main'
-            }
-            steps {
-                echo '⏸️  Waiting for manual approval...'
-                script {
-                    def plan = readFile 'tfplan.txt'
-                    input message: 'Apply this Terraform plan?',
-                          parameters: [text(name: 'Plan', description: 'Review the plan', defaultValue: plan)]
-                }
-            }
-        }
-
         stage('Terraform Apply') {
             when {
                 branch 'main'

@@ -61,8 +61,8 @@ module "vm" {
   servers       = var.servers
   instance_type = "t3.micro"  # Tipo por defecto (Free Tier)
   instance_types = {
-    jenkins = "t3.medium"  # 4 GB RAM para Jenkins + SonarQube + PostgreSQL (~$7.00/semana)
-    nginx   = "t3.micro"   # 1 GB RAM suficiente para Nginx (Free Tier)
+    jenkins = "t3.micro"   # 1 GB RAM - Free Tier eligible
+    nginx   = "t3.micro"   # 1 GB RAM - Free Tier eligible
   }
   subnet_id   = aws_subnet.main.id
   vpc_id      = aws_vpc.main.id
